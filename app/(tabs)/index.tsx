@@ -1,98 +1,433 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+/**
+ * Dashboard Screen
+ * Home screen with stats, quick actions, and recent receipts
+ */
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
+import { useState, useCallback, useEffect } from 'react';
+import {
+  StyleSheet,
+  View,
+  ScrollView,
+  TouchableOpacity,
+  Text,
+  RefreshControl,
+  Dimensions,
+} from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { ThemedText } from '@/components/themed-text';
+import { ReceiptCard } from '@/components/receipt/receipt-card';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import {
+  getReceiptStats,
+  getRecentReceipts,
+  initDatabase,
+} from '@/services/storage';
+import { Receipt, ReceiptStats, InvoiceType } from '@/types/receipt';
 
-export default function HomeScreen() {
+const { width } = Dimensions.get('window');
+const CARD_WIDTH = (width - 48) / 2;
+
+const INVOICE_TYPE_ICONS: Record<InvoiceType, string> = {
+  retail: 'cart.fill',
+  restaurant: 'fork.knife',
+  utility: 'bolt.fill',
+  service: 'wrench.and.screwdriver.fill',
+  unknown: 'doc.questionmark.fill',
+};
+
+export default function DashboardScreen() {
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
+
+  const [stats, setStats] = useState<ReceiptStats | null>(null);
+  const [recentReceipts, setRecentReceipts] = useState<Receipt[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Load dashboard data
+  const loadData = useCallback(async () => {
+    try {
+      const [statsData, receiptsData] = await Promise.all([
+        getReceiptStats(),
+        getRecentReceipts(5),
+      ]);
+      setStats(statsData);
+      setRecentReceipts(receiptsData);
+    } catch {
+      // Dashboard data load failed silently
+    }
+  }, []);
+
+  // Initialize database
+  useEffect(() => {
+    async function init() {
+      await initDatabase();
+      setIsInitialized(true);
+      await loadData();
+    }
+    init();
+  }, [loadData]);
+
+  // Reload when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (isInitialized) {
+        loadData();
+      }
+    }, [isInitialized, loadData])
+  );
+
+  // Handle refresh
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await loadData();
+    setIsRefreshing(false);
+  }, [loadData]);
+
+  // Format currency
+  const formatCurrency = (amount: number, currency: string = 'BDT') => {
+    return `${currency} ${amount.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <ThemedView style={styles.container}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.tint}
+          />
+        }
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={[styles.greeting, { color: colors.icon }]}>
+              Welcome to
+            </Text>
+            <ThemedText style={styles.title}>Receipt Scanner</ThemedText>
+          </View>
+          <TouchableOpacity
+            style={[styles.scanButton, { backgroundColor: colors.tint }]}
+            onPress={() => router.push('/(tabs)/capture')}
+          >
+            <IconSymbol name="camera.fill" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+        {/* Quick Stats Cards */}
+        <View style={styles.statsGrid}>
+          {/* Total Receipts */}
+          <View
+            style={[
+              styles.statCard,
+              { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5' },
+            ]}
+          >
+            <View style={[styles.statIcon, { backgroundColor: colorScheme === 'dark' ? '#1E3A5F' : '#E3F2FD' }]}>
+              <IconSymbol name="doc.text.fill" size={24} color="#2196F3" />
+            </View>
+            <Text style={[styles.statValue, { color: colors.text }]}>
+              {stats?.total_count ?? 0}
+            </Text>
+            <Text style={[styles.statLabel, { color: colors.icon }]}>
+              Total Receipts
+            </Text>
+          </View>
+
+          {/* This Month */}
+          <View
+            style={[
+              styles.statCard,
+              { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5' },
+            ]}
+          >
+            <View style={[styles.statIcon, { backgroundColor: colorScheme === 'dark' ? '#1B3D2F' : '#E8F5E9' }]}>
+              <IconSymbol name="calendar" size={24} color="#4CAF50" />
+            </View>
+            <Text style={[styles.statValue, { color: colors.text }]}>
+              {stats?.this_month_count ?? 0}
+            </Text>
+            <Text style={[styles.statLabel, { color: colors.icon }]}>
+              This Month
+            </Text>
+          </View>
+
+          {/* Total Spent */}
+          <View
+            style={[
+              styles.statCard,
+              styles.wideCard,
+              { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5' },
+            ]}
+          >
+            <View style={[styles.statIcon, { backgroundColor: colorScheme === 'dark' ? '#3D2E1B' : '#FFF3E0' }]}>
+              <IconSymbol name="banknote.fill" size={24} color="#FF9800" />
+            </View>
+            <Text style={[styles.statValue, { color: colors.text }]}>
+              {formatCurrency(stats?.total_amount ?? 0)}
+            </Text>
+            <Text style={[styles.statLabel, { color: colors.icon }]}>
+              Total Amount
+            </Text>
+          </View>
+        </View>
+
+        {/* Category Breakdown */}
+        {stats && stats.total_count > 0 && (
+          <View style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>By Category</ThemedText>
+            <View style={styles.categoriesGrid}>
+              {(Object.keys(stats.by_type) as InvoiceType[])
+                .filter((type) => stats.by_type[type] > 0)
+                .map((type) => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[
+                      styles.categoryCard,
+                      {
+                        backgroundColor:
+                          colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5',
+                      },
+                    ]}
+                    onPress={() => router.push('/(tabs)/history')}
+                  >
+                    <IconSymbol
+                      name={INVOICE_TYPE_ICONS[type] as any}
+                      size={20}
+                      color={colors.tint}
+                    />
+                    <Text style={[styles.categoryCount, { color: colors.text }]}>
+                      {stats.by_type[type]}
+                    </Text>
+                    <Text style={[styles.categoryLabel, { color: colors.icon }]}>
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+            </View>
+          </View>
+        )}
+
+        {/* Quick Actions */}
+        <View style={styles.section}>
+          <ThemedText style={styles.sectionTitle}>Quick Actions</ThemedText>
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: colors.tint }]}
+              onPress={() => router.push('/(tabs)/capture')}
+            >
+              <IconSymbol name="camera.fill" size={28} color="#fff" />
+              <Text style={styles.actionText}>Scan Receipt</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.actionCard,
+                { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5' },
+              ]}
+              onPress={() => router.push('/(tabs)/history')}
+            >
+              <IconSymbol name="clock.fill" size={28} color={colors.tint} />
+              <Text style={[styles.actionTextDark, { color: colors.text }]}>
+                View History
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Recent Receipts */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>Recent Receipts</ThemedText>
+            {recentReceipts.length > 0 && (
+              <TouchableOpacity onPress={() => router.push('/(tabs)/history')}>
+                <Text style={[styles.seeAllText, { color: colors.tint }]}>
+                  See All
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {recentReceipts.length === 0 ? (
+            <View style={styles.emptyReceipts}>
+              <IconSymbol name="doc.text.fill" size={48} color={colors.icon} />
+              <Text style={[styles.emptyText, { color: colors.icon }]}>
+                No receipts yet
+              </Text>
+              <Text style={[styles.emptySubtext, { color: colors.icon }]}>
+                Scan your first receipt to get started
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.recentList}>
+              {recentReceipts.map((receipt) => (
+                <ReceiptCard
+                  key={receipt.id}
+                  receipt={receipt}
+                  onPress={() => router.push(`/receipt/${receipt.id}`)}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 100,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  greeting: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  scanButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  statCard: {
+    width: CARD_WIDTH,
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'flex-start',
+  },
+  wideCard: {
+    width: '100%',
+  },
+  statIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 14,
+  },
+  section: {
+    marginTop: 24,
+    paddingHorizontal: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  seeAllText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  categoriesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  categoryCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    gap: 6,
+  },
+  categoryCount: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  categoryLabel: {
+    fontSize: 13,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionCard: {
+    flex: 1,
+    padding: 20,
+    borderRadius: 16,
+    alignItems: 'center',
+    gap: 10,
+  },
+  actionText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  actionTextDark: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  emptyReceipts: {
+    alignItems: 'center',
+    padding: 32,
     gap: 8,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginTop: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  emptySubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  recentList: {
+    marginHorizontal: -16,
   },
 });

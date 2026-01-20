@@ -6,7 +6,7 @@
 import { Platform } from 'react-native';
 
 const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColorDark = '#4FC3F7'; // Light blue that's visible on dark backgrounds
 
 export const Colors = {
   light: {
