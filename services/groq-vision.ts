@@ -23,10 +23,10 @@ const JPEG_QUALITY = 0.8;
 function getApiKey(): string {
   // For development, you can set this via expo-constants
   // In production, use EAS Secrets
-  const apiKey = process.env.EXPO_PUBLIC_GROQ_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     throw new Error(
-      'GROQ_API_KEY not found. Please set EXPO_PUBLIC_GROQ_API_KEY in your environment.'
+      'GROQ_API_KEY not found. Please set GROQ API KEY in your environment.'
     );
   }
   return apiKey;
