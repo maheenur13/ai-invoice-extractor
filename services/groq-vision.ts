@@ -18,16 +18,13 @@ const JPEG_QUALITY = 0.8;
 
 /**
  * Get Groq API key from environment
- * In production, use EAS Secrets
+ * Prefer EXPO_PUBLIC_GROQ_API_KEY for client builds; GROQ_API_KEY for server/dev
  */
 function getApiKey(): string {
-  // For development, you can set this via expo-constants
-  // In production, use EAS Secrets
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = process.env.EXPO_PUBLIC_GROQ_API_KEY;
+
   if (!apiKey) {
-    throw new Error(
-      'GROQ_API_KEY not found. Please set GROQ API KEY in your environment.'
-    );
+    throw new Error('GROQ_API_KEY not found. Please set EXPO_PUBLIC_GROQ_API_KEY or GROQ_API_KEY.');
   }
   return apiKey;
 }
@@ -35,7 +32,7 @@ function getApiKey(): string {
 /**
  * Receipt extraction prompt
  */
-const EXTRACTION_PROMPT = `You are a receipt/invoice data extraction expert. Analyze this receipt image and extract structured information.
+const EXTRACTION_PROMPT = `You are a multilingual receipt/invoice data extraction expert. Analyze this receipt image (may be English or Bengali/Bangla, including low-quality handwriting) and extract structured information. Handle skewed, blurry, low-light, or faint handwriting as well as printed text. If text is uncertain, still return best-effort values with lower confidence_score.
 
 Return a JSON object with EXACTLY these fields:
 {
