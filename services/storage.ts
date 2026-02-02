@@ -3,14 +3,14 @@
  * SQLite database operations for receipts
  */
 
-import * as SQLite from 'expo-sqlite';
 import {
-  Receipt,
-  ReceiptInput,
-  ReceiptFilter,
-  ReceiptStats,
   InvoiceType,
+  Receipt,
+  ReceiptFilter,
+  ReceiptInput,
+  ReceiptStats,
 } from '@/types/receipt';
+import * as SQLite from 'expo-sqlite';
 
 const DB_NAME = 'receipts.db';
 

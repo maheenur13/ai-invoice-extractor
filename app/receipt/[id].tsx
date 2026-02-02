@@ -3,29 +3,30 @@
  * View full receipt details and export options
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import {
-  StyleSheet,
-  View,
-  TouchableOpacity,
-  Text,
-  Alert,
-  ActivityIndicator,
-  ScrollView,
-  Modal,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { Image } from 'expo-image';
-import { ThemedView } from '@/components/themed-view';
-import { ThemedText } from '@/components/themed-text';
+import { ReceiptEditModal } from '@/components/receipt/receipt-edit-modal';
 import { ReceiptPreview } from '@/components/receipt/receipt-preview';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { getReceiptById, deleteReceipt } from '@/services/storage';
 import { exportAndShare } from '@/services/export';
-import { Receipt } from '@/types/receipt';
+import { deleteReceipt, getReceiptById, updateReceipt } from '@/services/storage';
+import { Receipt, ReceiptInput } from '@/types/receipt';
+import { Image } from 'expo-image';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ReceiptDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -37,6 +38,7 @@ export default function ReceiptDetailScreen() {
   const [isExporting, setIsExporting] = useState(false);
   const [showFullImage, setShowFullImage] = useState(false);
   const [showJsonPreview, setShowJsonPreview] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Load receipt
   useEffect(() => {
@@ -114,6 +116,23 @@ export default function ReceiptDetailScreen() {
     );
   }, [receipt]);
 
+  // Handle save edited receipt
+  const handleSaveEditedReceipt = useCallback(
+    async (updatedReceipt: ReceiptInput) => {
+      if (!receipt) return;
+
+      try {
+        const savedReceipt = await updateReceipt(receipt.id, updatedReceipt);
+        if (savedReceipt) {
+          setReceipt(savedReceipt);
+        }
+      } catch (error) {
+        throw error;
+      }
+    },
+    [receipt]
+  );
+
   // Format receipt as JSON for preview (excluding image_uri for cleaner view)
   const getJsonPreview = useCallback(() => {
     if (!receipt) return '';
@@ -188,12 +207,20 @@ export default function ReceiptDetailScreen() {
         options={{
           title: receipt.merchant_name || 'Receipt Details',
           headerRight: () => (
-            <TouchableOpacity
-              onPress={handleDelete}
-              style={styles.headerButton}
-            >
-              <IconSymbol name="trash.fill" size={22} color="#F44336" />
-            </TouchableOpacity>
+            <View style={styles.headerButtons}>
+              <TouchableOpacity
+                onPress={() => setShowEditModal(true)}
+                style={styles.headerButton}
+              >
+                <IconSymbol name="pencil" size={22} color={colors.tint} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleDelete}
+                style={styles.headerButton}
+              >
+                <IconSymbol name="trash.fill" size={22} color="#F44336" />
+              </TouchableOpacity>
+            </View>
           ),
         }}
       />
@@ -321,6 +348,13 @@ export default function ReceiptDetailScreen() {
           <Text style={styles.actionButtonText}>New</Text>
         </TouchableOpacity>
       </View>
+
+      <ReceiptEditModal
+        visible={showEditModal}
+        receipt={receipt}
+        onClose={() => setShowEditModal(false)}
+        onSave={handleSaveEditedReceipt}
+      />
     </ThemedView>
   );
 }
@@ -338,6 +372,10 @@ const styles = StyleSheet.create({
   notFoundText: {
     fontSize: 18,
     marginTop: 16,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
   },
   headerButton: {
     padding: 8,

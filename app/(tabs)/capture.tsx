@@ -3,20 +3,11 @@
  * Camera/upload screen with receipt processing flow
  */
 
-import { useState, useCallback } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  Alert,
-  ScrollView,
-} from 'react-native';
-import { router } from 'expo-router';
-import { ThemedView } from '@/components/themed-view';
-import { ThemedText } from '@/components/themed-text';
 import { CameraCapture } from '@/components/receipt/camera-capture';
+import { ReceiptEditModal } from '@/components/receipt/receipt-edit-modal';
 import { ReceiptPreview } from '@/components/receipt/receipt-preview';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -24,8 +15,18 @@ import {
   parseReceiptWithRetry,
   validateImage,
 } from '@/services/groq-vision';
-import { createReceipt } from '@/services/storage';
-import { Receipt, ProcessingState, ReceiptInput } from '@/types/receipt';
+import { createReceipt, updateReceipt } from '@/services/storage';
+import { ProcessingState, Receipt, ReceiptInput } from '@/types/receipt';
+import { router } from 'expo-router';
+import { useCallback, useState } from 'react';
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 export default function CaptureScreen() {
   const colorScheme = useColorScheme();
@@ -35,6 +36,7 @@ export default function CaptureScreen() {
   const [capturedImageUri, setCapturedImageUri] = useState<string | null>(null);
   const [processedReceipt, setProcessedReceipt] = useState<Receipt | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Handle image capture
   const handleCapture = useCallback(async (imageUri: string) => {
@@ -99,6 +101,28 @@ export default function CaptureScreen() {
       router.push(`/receipt/${processedReceipt.id}`);
     }
   }, [processedReceipt]);
+
+  // Handle edit receipt
+  const handleEditReceipt = useCallback(() => {
+    setShowEditModal(true);
+  }, []);
+
+  // Handle save edited receipt
+  const handleSaveEditedReceipt = useCallback(
+    async (updatedReceipt: ReceiptInput) => {
+      if (!processedReceipt) return;
+
+      try {
+        const savedReceipt = await updateReceipt(processedReceipt.id, updatedReceipt);
+        if (savedReceipt) {
+          setProcessedReceipt(savedReceipt);
+        }
+      } catch (error) {
+        throw error;
+      }
+    },
+    [processedReceipt]
+  );
 
   // Save with error - for cases where image couldn't be parsed
   const handleSaveWithError = useCallback(async () => {
@@ -208,6 +232,14 @@ export default function CaptureScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={[styles.button, styles.outlineButton, { borderColor: colors.tint }]}
+            onPress={handleEditReceipt}
+          >
+            <IconSymbol name="pencil" size={20} color={colors.tint} />
+            <Text style={[styles.buttonText, { color: colors.tint }]}>Edit</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={[styles.button, { backgroundColor: colors.tint }]}
             onPress={handleViewDetails}
           >
@@ -215,6 +247,13 @@ export default function CaptureScreen() {
             <Text style={styles.buttonText}>View Details</Text>
           </TouchableOpacity>
         </View>
+
+        <ReceiptEditModal
+          visible={showEditModal}
+          receipt={processedReceipt}
+          onClose={() => setShowEditModal(false)}
+          onSave={handleSaveEditedReceipt}
+        />
       </ThemedView>
     );
   }
