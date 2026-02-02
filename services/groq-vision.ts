@@ -32,7 +32,78 @@ function getApiKey(): string {
 /**
  * Receipt extraction prompt
  */
-const EXTRACTION_PROMPT = `You are a multilingual receipt/invoice data extraction expert. Analyze this receipt image (may be English or Bengali/Bangla, including low-quality handwriting) and extract structured information. Handle skewed, blurry, low-light, or faint handwriting as well as printed text. If text is uncertain, still return best-effort values with lower confidence_score.
+const EXTRACTION_PROMPT = `You are an expert multilingual receipt/invoice data extraction system with specialized support for Bengali/Bangla language and handwriting recognition. You excel at reading both printed and handwritten text in English and Bangla, even when handwriting is poor, messy, or difficult to read.
+
+LANGUAGE SUPPORT - CRITICAL:
+- This receipt may be in English, Bengali/Bangla, or a mix of both languages
+- You MUST detect and read Bangla script (বাংলা) characters accurately
+- DO NOT hallucinate or invent Bangla text - only extract what you can actually see in the image
+- If Bangla text is unclear, extract what you can see, but do not make up words or characters
+
+BANGLA ALPHABET REFERENCE - Use this to recognize characters:
+- Bangla Vowels (স্বরবর্ণ): অ, আ, ই, ঈ, উ, ঊ, ঋ, এ, ঐ, ও, ঔ
+- Bangla Consonants (ব্যঞ্জনবর্ণ): 
+  - ক, খ, গ, ঘ, ঙ
+  - চ, ছ, জ, ঝ, ঞ
+  - ট, ঠ, ড, ঢ, ণ
+  - ত, থ, দ, ধ, ন
+  - প, ফ, ব, ভ, ম
+  - য, র, ল, শ, ষ, স, হ
+  - ড়, ঢ়, য়, ৎ
+- Vowel Signs (কার): া, ি, ী, ু, ূ, ৃ, ে, ৈ, ো, ৌ
+- Special Characters: ্ (হসন্ত), ঁ (চন্দ্রবিন্দু), ঃ (বিসর্গ), ং (অনুস্বার)
+- Common Character Combinations:
+  - ক্ষ (ক + ষ), জ্ঞ (জ + ঞ), ত্র (ত + র), শ্র (শ + র)
+  - ষ্ঠ (ষ + ঠ), ষ্প (ষ + প), ষ্ম (ষ + ম), ন্ত (ন + ত), ন্দ (ন + দ)
+
+Common Bangla Receipt Words (for context, but extract what you actually see):
+- দোকান/দোকানী (shop/store), রেস্তোরাঁ (restaurant), বিল (bill)
+- তারিখ (date), নাম (name), পরিমাণ (quantity), মূল্য (price)
+- মোট (total), কর (tax), পরিশোধ (payment), নগদ (cash)
+- দোকানের নাম (shop name), ঠিকানা (address), ফোন (phone)
+- আইটেম (item), পণ্য (product), পরিমাণ (quantity), ইউনিট (unit)
+
+IMPORTANT - Accuracy Rules:
+- Read Bangla characters carefully - each character has distinct shapes
+- Do NOT confuse similar-looking characters (e.g., ত vs থ, দ vs ধ, প vs ফ)
+- Preserve exact Bangla spelling as written - do not correct or modify
+- If a character is unclear, use context but do not invent characters
+- For merchant_name and item names, preserve Bangla text exactly as written (don't translate to English)
+- If you cannot read a Bangla word clearly, extract what you can see rather than guessing
+
+HANDWRITING RECOGNITION - CRITICAL:
+- This receipt may contain poor, messy, or difficult-to-read handwriting
+- Apply advanced handwriting recognition techniques:
+  - Look for character patterns even when strokes are incomplete or overlapping
+  - Recognize common handwriting variations and sloppy writing styles
+  - Use context clues (surrounding text, typical receipt formats) to interpret unclear characters
+  - For numbers: recognize handwritten digits even if they're poorly formed, slanted, or partially obscured
+  - For text: use linguistic context to fill in unclear Bangla or English characters
+- Handle various handwriting issues:
+  - Faint or light ink (barely visible strokes)
+  - Overlapping or touching characters
+  - Irregular spacing between words/characters
+  - Slanted or rotated text
+  - Incomplete characters (missing strokes)
+  - Smudged or blurred writing
+- If handwriting is extremely unclear, make your best educated guess based on context and typical receipt patterns
+- Set confidence_score lower (0.3-0.6) for poor handwriting, but still extract what you can
+
+IMAGE QUALITY HANDLING:
+- Handle skewed, rotated, blurry, low-light, or low-resolution images
+- Apply image enhancement techniques mentally to read text in poor conditions
+- Look for text even when image quality is degraded
+- If text is partially obscured or cut off, extract what's visible
+
+CRITICAL: Bangla/Bengali Number Conversion
+- The receipt may contain Bangla numerals (০, ১, ২, ৩, ৪, ৫, ৬, ৭, ৮, ৯) in both printed and handwritten form
+- You MUST convert ALL Bangla numerals to their English equivalents:
+  - ০ → 0, ১ → 1, ২ → 2, ৩ → 3, ৪ → 4
+  - ৫ → 5, ৬ → 6, ৭ → 7, ৮ → 8, ৯ → 9
+- ALL numeric fields (quantity, price, subtotal, tax, total) MUST be returned as numbers using English digits (0-9)
+- Even if numbers appear in Bangla script (printed or handwritten), convert them to English numerals in the JSON response
+- For example: "৫০০" or handwritten "৫০০" should be converted to 500, "১২৩৪" should be converted to 1234
+- Handle handwritten Bangla numerals even when poorly written - use context and typical number patterns to interpret them
 
 Return a JSON object with EXACTLY these fields:
 {
@@ -43,13 +114,13 @@ Return a JSON object with EXACTLY these fields:
   "items": [
     {
       "name": "string - item description",
-      "quantity": "number or null",
-      "price": "number - item total price"
+      "quantity": "number or null - MUST be English numerals",
+      "price": "number - item total price, MUST be English numerals"
     }
   ],
-  "subtotal": "number or null",
-  "tax": "number or null", 
-  "total": "number - the final total amount",
+  "subtotal": "number or null - MUST be English numerals",
+  "tax": "number or null - MUST be English numerals", 
+  "total": "number - the final total amount, MUST be English numerals",
   "currency": "string - currency code like BDT, USD, EUR",
   "payment_method": "string or null - Cash, Card, Mobile, etc.",
   "confidence_score": "number between 0 and 1 based on image quality and text clarity",
@@ -57,17 +128,26 @@ Return a JSON object with EXACTLY these fields:
 }
 
 Rules:
+- ACCURACY FIRST: Only extract text you can actually see in the image. DO NOT hallucinate, invent, or guess Bangla words. If text is unclear, extract partial text or use null rather than making up words.
+- LANGUAGE: Read and extract text in both English and Bangla/Bengali. Use the Bangla alphabet reference above to recognize characters accurately. Preserve Bangla text in merchant_name and item names exactly as written (don't translate or modify).
+- HANDWRITING: Apply advanced recognition for poor handwriting - use context, patterns, and educated guesses. Even messy handwriting should be extracted with appropriate confidence scores. However, if handwriting is too unclear to read, use null or partial text rather than guessing.
 - If a field cannot be determined, use null (except required fields)
-- total is required - estimate if not clearly visible
-- currency defaults to "BDT" if not detectable
-- confidence_score should reflect image quality and extraction certainty
+- total is required - estimate if not clearly visible, even from poor handwriting
+- currency defaults to "BDT" if not detectable (common for Bangla receipts)
+- confidence_score should reflect:
+  - Image quality (blurry, low-light, skewed)
+  - Text clarity (printed vs handwritten, handwriting quality)
+  - Language complexity (mixed languages, unclear characters)
+  - Range: 0.9-1.0 for clear printed text, 0.7-0.8 for clear handwriting, 0.4-0.6 for poor handwriting, 0.2-0.3 for very unclear text
+- ALL numbers must be in English numerals (0-9), never Bangla numerals (০-৯), even if handwritten in Bangla
 - For invoice_type:
-  - "retail" for stores, supermarkets, shops
-  - "restaurant" for food establishments
-  - "utility" for electricity, water, gas, internet bills
+  - "retail" for stores, supermarkets, shops (দোকান, সুপারমার্কেট)
+  - "restaurant" for food establishments (রেস্তোরাঁ, হোটেল)
+  - "utility" for electricity, water, gas, internet bills (বিদ্যুৎ, পানি, গ্যাস বিল)
   - "service" for services like repairs, maintenance
   - "unknown" if cannot determine or not a valid receipt
 - If the image is NOT a receipt/invoice, set invoice_type to "unknown" and provide a clear error_message
+- For poor handwriting: Extract best-effort values even if uncertain - it's better to have approximate data than null values
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
@@ -177,7 +257,7 @@ export async function parseReceipt(
             ],
           },
         ],
-        temperature: 0.1, // Low temperature for consistent extraction
+        temperature: 0.0, // Zero temperature to minimize hallucinations and ensure accuracy
         max_completion_tokens: 2048,
         response_format: { type: 'json_object' },
       }),
